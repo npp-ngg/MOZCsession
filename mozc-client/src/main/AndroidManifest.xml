@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" >
+    <application>
+        <meta-data android:name="versionCode" android:value="6028153" />
+        <meta-data android:name="versionName" android:value="2.23.2815.103-arm64" />
+    </application>
+</manifest>

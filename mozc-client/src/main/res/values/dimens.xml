@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+ Copyright 2010-2018, Google Inc.
+ All rights reserved.
+
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+
+     * Redistributions of source code must retain the above copyright
+ notice, this list of conditions and the following disclaimer.
+     * Redistributions in binary form must reproduce the above
+ copyright notice, this list of conditions and the following disclaimer
+ in the documentation and/or other materials provided with the
+ distribution.
+     * Neither the name of Google Inc. nor the names of its
+ contributors may be used to endorse or promote products derived from
+ this software without specific prior written permission.
+
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+<resources>
+
+    <dimen name="key_preview_height">60dip</dimen>
+    <dimen name="mini_keyboard_vertical_correction">-81dip</dimen>
+    <dimen name="keyboard_separator_padding">16dip</dimen>
+    <dimen name="keyboard_separator_width">1dip</dimen>
+    <dimen name="default_function_icon_height">32dip</dimen>
+    <!-- This values is effective only when the keyboard height is very short.
+         As the icon resoureces of QWERTY keyboard don't have padding in them,
+         without minimum padding the design breaks. -->
+    <item name="keyboard_qwerty_default_vertical_padding" format="fraction" type="fraction">0.75%</item>
+    <item name="keyboard_qwerty_default_horizontal_padding" format="fraction" type="fraction">0.80%</item>
+    <!-- The width of on-memory keyboard to render keyboard preview image. 360dip is Nexus5's. -->
+    <!-- symbol_view_major_category_height = input_frame_height / 4 (3 is for candidate rows, 1 is for major category) -->
+    <dimen name="symbol_view_symbol_min_column_width">60dip</dimen>
+    <dimen name="symbol_view_emoticon_min_column_width">88dip</dimen>
+    <dimen name="symbol_view_emoji_min_column_width">60dip</dimen>
+    <!-- symbol_view_height = input_frame_height + (candidate_text_size + candidate_vertical_padding_size * 2) -->
+    <!-- symbol_view_number_keyboard_height = input_frame_height - symbol_view_major_category_height -->
+    <!--
+       ime_window_height = input_frame_height + (candidate_text_size + candidate_vertical_padding_size * 2) * n
+       n = 2 for portrait. Otherwise n = 1.
+    -->
+    <!-- button_frame_height = candidate_text_size + candidate_vertical_padding_size * 2 -->
+
+    <!-- 2 rows of candidates -->
+    <!-- (candidate_text_size + candidate_vertical_padding_size * 2) * 2 -->
+
+
+    <!-- Icon size.
+         Both phones and tables employ the same size except for
+         - Characters on keyboareds.
+         - Icons on symbol picker.
+    -->
+    <dimen name="unlimited">10000dip</dimen>
+    <dimen name="keyboard_enter_width">36dip</dimen>
+    <dimen name="keyboard_qwerty_space_height">30dip</dimen>
+    <dimen name="symbol_major_emoji_height">20dip</dimen>
+    <dimen name="symbol_major_emoticon_height">17dip</dimen>
+    <dimen name="symbol_major_number_height">14dip</dimen>
+    <dimen name="symbol_major_symbol_height">17dip</dimen>
+    <dimen name="symbol_minor_default_height">20dip</dimen>
+    <dimen name="symbol_minor_emoticon_height">16dip</dimen>
+
+    <!-- Character size of keyboard, depending on the screen size. -->
+    <dimen name="keyboard_godan_default_height">42dip</dimen>
+    <dimen name="keyboard_twelvekeys_default_height">56dip</dimen>
+    <!-- TODO(hsumita): Remove if not necessary. -->
+    <dimen name="keyboard_qwerty_default_height">32dip</dimen>
+    <!--
+        Popup icon size is 20% bigger than key icon.
+        - On qwerty keyboard, popup has enough area so we can use same image
+          resources and simply scale it.
+        - On other keyboard, popup doesn't have enough area so we use enlarged
+          image resources.
+    -->
+    <dimen name="key_preview_icon_height">@dimen/keyboard_twelvekeys_default_height</dimen>
+    <dimen name="key_preview_qwerty_icon_height">38.4dip</dimen>
+    <dimen name="key_preview_emoji_icon_height">36dip</dimen>
+
+</resources>
