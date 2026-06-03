@@ -31,6 +31,7 @@ package org.mozc.android.inputmethod.japanese.session;
 
 import org.mozc.android.inputmethod.japanese.MozcLog;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Command;
+import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -53,6 +54,7 @@ class LocalSessionHandler implements SessionHandler {
 
   @Override
   public void initialize(Context context) {
+android.os.Debug.waitForDebugger();
     try {
       ApplicationInfo info = Preconditions.checkNotNull(context).getApplicationInfo();
 
@@ -65,7 +67,7 @@ class LocalSessionHandler implements SessionHandler {
           // even in this case, but no persistent data (e.g. user history, user dictionary)
           // will be stored, so some fuctions using them won't work well.
           MozcLog.e(
-              "Failed to create user profile directory: " + userProfileDirectory.getAbsolutePath());
+                  "Failed to create user profile directory: " + userProfileDirectory.getAbsolutePath());
         }
       }
 
@@ -74,14 +76,15 @@ class LocalSessionHandler implements SessionHandler {
       PackageManager pm = context.getPackageManager();
       String versionName =
 //          context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
-          pm.getApplicationInfo(context.getPackageName(),pm.GET_META_DATA).metaData.getString("versionName");
+              pm.getApplicationInfo(context.getPackageName(),pm.GET_META_DATA).metaData.getString("versionName");
       Matcher matcher = Pattern.compile("^(\\d+\\.\\d+\\.\\d+\\.\\d+)-\\w+$").matcher(versionName);
       if (!matcher.matches()) {
         throw new RuntimeException("Invalid version name: " + versionName);
       }
 
       // Load the shared object.
-      MozcJNI.load(userProfileDirectory.getAbsolutePath(), null, matcher.group(1));
+//      MozcJNI.load(userProfileDirectory.getAbsolutePath(), null, matcher.group(1));
+      MozcJNI.load(userProfileDirectory.getAbsolutePath(), null);
     } catch (NameNotFoundException e) {
       throw new RuntimeException(e);
     }
@@ -96,7 +99,7 @@ class LocalSessionHandler implements SessionHandler {
       return Command.parseFrom(outBytes);
     } catch (InvalidProtocolBufferException e) {
       MozcLog.w("InvalidProtocolBufferException is thrown."
-          + "We can do nothing so just return default instance.");
+              + "We can do nothing so just return default instance.");
       MozcLog.w(e.toString());
       return Command.getDefaultInstance();
     }
