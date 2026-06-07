@@ -10,7 +10,6 @@ android {
 
     defaultConfig {
         minSdk 25
-        targetSdk 25
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -24,11 +23,17 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+    lint {
+        targetSdk 25
+    }
+    testOptions {
+        targetSdk 25
+    }
 }
 
 dependencies {
     implementation libs.material
-    implementation libs.protobuf.java
+    implementation libs.protobuf
     implementation libs.guava
     implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'], exclude: [])
     implementation libs.javax.annotation.api

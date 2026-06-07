@@ -25,7 +25,7 @@ import org.mozc.android.inputmethod.japanese.MozcLog;
 import org.mozc.android.inputmethod.japanese.PrimaryKeyCodeConverter;
 import org.mozc.android.inputmethod.japanese.keyboard.ProbableKeyEventGuesser;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig.Config;
-import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoUserDictionaryStorage;
 import org.mozc.android.inputmethod.japanese.session.SessionExecutor;

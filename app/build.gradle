@@ -33,7 +33,7 @@ dependencies {
     implementation libs.material
     implementation libs.activity
     implementation libs.constraintlayout
-    implementation libs.protobuf.java
+    implementation libs.protobuf
     implementation libs.guava
     implementation project(':mozc-client')
     testImplementation libs.junit
