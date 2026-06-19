@@ -27,7 +27,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package org.mozc.android.inputmethod.japanese;
+package org.mozc.android.inputmethod;
 
 import android.annotation.SuppressLint;
 import android.util.Log;
@@ -67,7 +67,7 @@ public class MozcLog {
   }
 
   public static boolean isLoggable(int logLevel) {
-    return true;//Log.isLoggable(MozcUtil.LOGTAG, logLevel);
+    return Log.isLoggable(MozcUtil.LOGTAG, logLevel);
   }
 
   @SuppressLint("LogTagMismatch")
@@ -77,54 +77,63 @@ public class MozcLog {
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void v(String msg, Throwable e) {
     if (isLoggable(Log.VERBOSE)) {
       Log.v(MozcUtil.LOGTAG, msg, e);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void d(String msg) {
     if (isLoggable(Log.DEBUG)) {
       Log.d(MozcUtil.LOGTAG, msg);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void d(String msg, Throwable e) {
     if (isLoggable(Log.DEBUG)) {
       Log.d(MozcUtil.LOGTAG, msg, e);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void i(String msg) {
     if (isLoggable(Log.INFO)) {
       Log.i(MozcUtil.LOGTAG, msg);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void i(String msg, Throwable e) {
     if (isLoggable(Log.INFO)) {
       Log.i(MozcUtil.LOGTAG, msg, e);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void w(String msg) {
     if (isLoggable(Log.WARN)) {
       Log.w(MozcUtil.LOGTAG, msg);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void w(String msg, Throwable e) {
     if (isLoggable(Log.WARN)) {
       Log.w(MozcUtil.LOGTAG, msg, e);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void e(String msg) {
     if (isLoggable(Log.ERROR)) {
       Log.e(MozcUtil.LOGTAG, msg);
     }
   }
 
+  @SuppressLint("LogTagMismatch")
   public static void e(String msg, Throwable e) {
     if (isLoggable(Log.ERROR)) {
       Log.e(MozcUtil.LOGTAG, msg, e);

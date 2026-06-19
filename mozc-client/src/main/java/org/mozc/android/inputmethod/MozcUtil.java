@@ -27,7 +27,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package org.mozc.android.inputmethod.japanese;
+package org.mozc.android.inputmethod;
 
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Request;
 import com.google.common.annotations.VisibleForTesting;
@@ -94,5 +94,11 @@ public final class MozcUtil {
               throw e;
           }
       }
+  }
+  /**
+   * If value &gt;= max returns max. If value &lt;= min returns min. Otherwise returns value.
+   */
+  public static int clamp(int value, int min, int max) {
+    return Math.max(Math.min(value, max), min);
   }
 }

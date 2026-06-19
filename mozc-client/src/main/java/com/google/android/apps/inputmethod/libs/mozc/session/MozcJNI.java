@@ -29,7 +29,7 @@
 
 package com.google.android.apps.inputmethod.libs.mozc.session;
 
-import org.mozc.android.inputmethod.japanese.MozcLog;
+import org.mozc.android.inputmethod.MozcLog;
 import com.google.common.base.Preconditions;
 
 /**

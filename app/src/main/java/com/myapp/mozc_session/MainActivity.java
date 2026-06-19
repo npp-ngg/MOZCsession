@@ -1,11 +1,10 @@
 package com.myapp.mozc_session;
 //
 import android.content.Context;
-import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Message;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
@@ -17,21 +16,18 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 //
-import com.google.common.base.Optional;
+import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
 import com.google.common.base.Preconditions;
 //
-import org.mozc.android.inputmethod.japanese.KeycodeConverter;
-import org.mozc.android.inputmethod.japanese.MozcLog;
-import org.mozc.android.inputmethod.japanese.PrimaryKeyCodeConverter;
-import org.mozc.android.inputmethod.japanese.keyboard.ProbableKeyEventGuesser;
-import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig.Config;
-import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands;
-import org.mozc.android.inputmethod.japanese.protobuf.ProtoUserDictionaryStorage;
-import org.mozc.android.inputmethod.japanese.session.SessionExecutor;
-import org.mozc.android.inputmethod.japanese.session.SessionHandlerFactory;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Command;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.KeyEvent;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Output;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig.Config;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow.CandidateWindow;
 //
-import java.util.ArrayList;
+import java.io.File;
 import java.util.List;
 //
 public class MainActivity extends AppCompatActivity {
@@ -39,15 +35,11 @@ public class MainActivity extends AppCompatActivity {
     final String TAG="MOZCsession";
     View mainView;
     TextView key,word,addButton,selButton;
-    SessionExecutor sessionExecutor;
     Context context;
     HandlerThread syncDataThread;
     Handler syncDataHandler;
-    ProbableKeyEventGuesser guesser;
-    PrimaryKeyCodeConverter primaryKeyCodeConverter;
     long sessionId;
     long selectedDictionaryId;
-    ProtoUserDictionaryStorage.UserDictionaryStorage storage;
     Config config;
     //
     class SaveTouchEvent implements View.OnTouchListener{
@@ -56,149 +48,74 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
     }
-    private class RenderResultCallback implements SessionExecutor.EvaluationCallback {
-        @Override public void onCompleted(
-                Optional<ProtoCommands.Command> command, Optional<KeycodeConverter.KeyEventInterface> triggeringKeyEvent) {
-            Preconditions.checkArgument(Preconditions.checkNotNull(command).isPresent());
-            Preconditions.checkNotNull(triggeringKeyEvent);
-            ProtoCommands.Output output=command.get().getOutput();
-            if(output.hasAllCandidateWords()){
-                ProtoCandidates.CandidateList candidates=output.getAllCandidateWords();
-                for(int i=0;i<candidates.getCandidatesCount();i++){
-                    String candidateWord=candidates.getCandidates(i).getValue();
-                Log.d(TAG,"getAllCandidateWords("+output.getAllCandidateWords().getCandidates(i).getId()+")="+candidateWord);
+    public long createSession() {
+        long sessionId=0;
+        Command command=Command.newBuilder()
+                .setInput(Input.newBuilder()
+                        .setType(Input.CommandType.CREATE_SESSION)
+                        .build())
+                .build();
+        Command response=execute(command);
+        if(command!=null){
+            if (response.hasOutput()) {
+                Output output = response.getOutput();
+                if (output.getErrorCode() == Output.ErrorCode.SESSION_SUCCESS) {
+                    sessionId = output.getId();
+                } else {
+                    System.err.println("Session creation failed: " + output.getErrorCode());
                 }
             }
         }
+        return sessionId;
     }
-    private class GetResultCallback implements SessionExecutor.EvaluationCallback {
-        @Override public void onCompleted(
-                Optional<ProtoCommands.Command> response, Optional<KeycodeConverter.KeyEventInterface> triggeringKeyEvent) {
-// 確定結果（result）をエディタに反映させる
-            String resultText = "NOTHING";
-            if (response.get().hasOutput() && response.get().getOutput().hasResult()) {
-                resultText = response.get().getOutput().getResult().getValue();
+    // 2. キー入力の送信（変換）
+    Output sendKey(String keyString) {
+        // 1. キーイベントを定義
+        ProtoCommands.KeyEvent keyEvent = KeyEvent.newBuilder()
+                .setKeyString(keyString)
+                .build();
+        Input input = Input.newBuilder()
+                .setType(Input.CommandType.SEND_KEY)
+                .setId(sessionId) // ★ Inputに対してIDをセットする
+                .setKey(keyEvent)
+                .build();
+        Command command = Command.newBuilder()
+                .setInput(input)
+                .build();
+        Command response = execute(command);
+        if(response!=null)
+            if (response.hasOutput()) {
+                return response.getOutput();
             }
-            Log.d(TAG,"EvaluationCallback: "+resultText);
-        }
+        return null;
     }
-    void convertByMozc(String s) {
-        int primaryCode = 0;
-        List<ProtoCommands.Input.TouchEvent> touchEventList = new ArrayList<>();
-        ProtoCommands.KeyEvent keyEvent = ProtoCommands.KeyEvent.newBuilder()
-                .setKeyString(s)
+    Output sendSpace(){
+        Input input = Input.newBuilder()
+                .setType(Input.CommandType.SEND_KEY)
+                .setId(sessionId)
+                .setKey(KeyEvent.newBuilder().setSpecialKey(KeyEvent.SpecialKey.SPACE).build())
                 .build();
-        sessionExecutor.sendKey(
-                keyEvent,
-                primaryKeyCodeConverter.getPrimaryCodeKeyEvent(primaryCode),
-                touchEventList,
-                new RenderResultCallback()
-        );
+        Command command = Command.newBuilder()
+                .setInput(input)
+                .build();
+        Command response = execute(command);
+        if(response!=null)
+            if (response.hasOutput()) {
+                return response.getOutput();
+            }
+        return null;
     }
-    private long createSession() {
-        ProtoUserDictionaryStorage.UserDictionaryCommand command = ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.CREATE_SESSION)
-                .build();
-        ProtoUserDictionaryStorage.UserDictionaryCommandStatus status = sessionExecutor.sendUserDictionaryCommand(command);
-        if (status.getStatus() != ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS) {
-            throw new IllegalStateException("UserDictionaryCommand session sshsould be created always.");
+    // JNI呼び出しのラッパー
+    private Command execute(Command command) {
+        try {
+            byte[] responseBytes = MozcJNI.evalCommand(command.toByteArray());
+            Command response=Command.parseFrom(responseBytes);
+            Log.d(TAG,"Response="+response.toString());
+            return response;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
-        return status.getSessionId();
-    }
-    final private static String userDictionaryName="_USER_DICTIONARY_";
-    private boolean renewUserDictionary(){
-        ProtoUserDictionaryStorage.UserDictionaryCommand command;
-        ProtoUserDictionaryStorage.UserDictionaryCommandStatus status;
-        command = ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.LOAD)
-                .setSessionId(sessionId)
-                .setEnsureNonEmptyStorage(true)
-                .build();
-        status = sessionExecutor.sendUserDictionaryCommand(command);
-        Log.d(TAG,"LOAD:"+status.toString());
-        command=ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.GET_USER_DICTIONARY_NAME_LIST)
-                .setSessionId(sessionId)
-                .build();
-        status=sessionExecutor.sendUserDictionaryCommand(command);
-        Log.d(TAG,"GET_USER_DICTIONARY_NAME_LIST:"+status.toString());
-        if(status.getStatus()!=ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS) {
-            Log.e(TAG,"GET_USER_DICTIONARY_NAME_LIST:"+status.getStatus());
-            return false;
-        }
-        storage=status.getStorage();
-        status.getStorage().getDictionariesList().forEach(s->Log.d(TAG,"name="+s.getName()));
-        java.util.Optional<ProtoUserDictionaryStorage.UserDictionary> userDictionary_w=
-        status.getStorage().getDictionariesList().stream().filter(s->s.getName().equals(userDictionaryName)).findFirst();
-        if(userDictionary_w.isPresent()){
-            command=ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                    .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.DELETE_DICTIONARY)
-                    .setSessionId(sessionId)
-                    .setDictionaryId(userDictionary_w.get().getId())
-                    .build();
-            status=sessionExecutor.sendUserDictionaryCommand(command);
-            Log.d(TAG, "DELETE_DICTIONARY:"+status.toString());
-        }
-        command=ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.CREATE_DICTIONARY)
-                .setSessionId(sessionId)
-                .setDictionaryName(userDictionaryName)
-                .build();
-        status=sessionExecutor.sendUserDictionaryCommand(command);
-        Log.d(TAG,"CREATE_DICTIONARY:"+status.toString());
-        if (status.getStatus()==ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS){
-            selectedDictionaryId=status.getDictionaryId();
-        }else{
-            Log.e(TAG,"CREATE_DICTIONARY:"+status.getStatus());
-            return false;
-        }
-        command=ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.SET_DEFAULT_DICTIONARY_NAME)
-                .setSessionId(sessionId)
-                .setDictionaryName(userDictionaryName)
-                .build();
-        status=sessionExecutor.sendUserDictionaryCommand(command);
-        if (status.getStatus()==ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS){
-            sessionExecutor.reload();
-            return true;
-        }else{
-            Log.e(TAG,"SET_DEFAULT_DICTIONARY_NAME:"+status.getStatus());
-            return false;
-        }
-    }
-    private boolean addEntry(String word, String reading, ProtoUserDictionaryStorage.UserDictionary.PosType pos){
-        ProtoUserDictionaryStorage.UserDictionaryCommand command=ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.ADD_ENTRY)
-                .setSessionId(sessionId)
-                .setDictionaryId(selectedDictionaryId)
-                .setEntry(ProtoUserDictionaryStorage.UserDictionary.Entry.newBuilder()
-                        .setKey(reading)
-                        .setValue(word)
-                        .setPos(pos))
-                .build();
-        ProtoUserDictionaryStorage.UserDictionaryCommandStatus status=sessionExecutor.sendUserDictionaryCommand(command);
-        Log.d(TAG,"ADD_ENTRY:"+status.toString());
-        if(status.getStatus()==ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS){
-            return true;
-        }else{
-            Log.e(TAG,"ADD_ENTRY:"+status.getStatus());
-            return false;
-        }
-    }
-    private List<ProtoUserDictionaryStorage.UserDictionary.Entry> getEntries(int beginIndex, int endIndex) {
-        ProtoUserDictionaryStorage.UserDictionaryCommand.Builder builder = ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.GET_ENTRIES)
-                .setSessionId(sessionId)
-                .setDictionaryId(selectedDictionaryId);
-        for (int i = beginIndex; i < endIndex; ++i) {
-            builder.addEntryIndex(i);
-        }
-        ProtoUserDictionaryStorage.UserDictionaryCommandStatus status = sessionExecutor.sendUserDictionaryCommand(builder.build());
-        if (status.getStatus() != ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS) {
-            MozcLog.e("Unknown failure: " + status.getStatus());
-            return new ArrayList<ProtoUserDictionaryStorage.UserDictionary.Entry>();
-        }
-        return status.getEntriesList();
     }
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -215,54 +132,37 @@ public class MainActivity extends AppCompatActivity {
         word=mainView.findViewById(R.id.word);
         addButton=mainView.findViewById(R.id.addbtn);
         selButton=mainView.findViewById(R.id.selbtn);
-        addButton.setOnClickListener(btn -> {
-            ProtoUserDictionaryStorage.UserDictionaryCommand command;
-            ProtoUserDictionaryStorage.UserDictionaryCommandStatus status;
-            addEntry(word.getText().toString(),key.getText().toString(),ProtoUserDictionaryStorage.UserDictionary.PosType.NOUN);
-            command = ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.GET_ENTRY_SIZE)
-                .setSessionId(sessionId)
-                .setDictionaryId(selectedDictionaryId)
-                .build();
-            status = sessionExecutor.sendUserDictionaryCommand(command);
-            Log.d(TAG,"GET_ENTRY_SIZE:"+status.toString());
-            if (status.getStatus()==ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS) {
-                getEntries(0,status.getEntrySize()).forEach(s->Log.d(TAG,"entry="+s.getKey()+","+s.getValue()));
-            }
-            command=ProtoUserDictionaryStorage.UserDictionaryCommand.newBuilder()
-                    .setType(ProtoUserDictionaryStorage.UserDictionaryCommand.CommandType.SAVE)
-                    .setSessionId(sessionId)
-                    .build();
-            status=sessionExecutor.sendUserDictionaryCommand(command);
-            if (status.getStatus()!=ProtoUserDictionaryStorage.UserDictionaryCommandStatus.Status.USER_DICTIONARY_COMMAND_SUCCESS) {
-                Log.e(TAG,"SAVE:"+status.toString());
-            }
-            Log.d(TAG,"SAVE:"+status.toString());
-            sessionExecutor.reload();// When succeeded, we need to reload the mozc server.
-        });
         selButton.setOnClickListener(selBtn -> {
-            sessionExecutor.resetContext();
-            convertByMozc(key.getText().toString());
+            Output output=sendKey(key.getText().toString());
+            CandidateWindow candidates=output.getCandidateWindow();
+            //Log.d(TAG,"candidates="+candidates.toString());
+            if (output.hasCandidateWindow()) {
+                CandidateWindow window = output.getCandidateWindow();
+                List<CandidateWindow.Candidate> candidateList = window.getCandidateList();
+                for (CandidateWindow.Candidate candidate : candidateList) {
+                    String value = candidate.getValue();
+                    int id = candidate.getId();
+                    int index = candidate.getIndex();
+                    Log.d(TAG,"候補: " + value + " (ID: " + id + ")");
+                }
+            }
+            output=sendSpace();
+            if (output.hasCandidateWindow()) {
+                CandidateWindow window = output.getCandidateWindow();
+                List<CandidateWindow.Candidate> candidateList = window.getCandidateList();
+                for (CandidateWindow.Candidate candidate : candidateList) {
+                    String value = candidate.getValue(); // 漢字やかななどの表示文字列
+                    int id = candidate.getId();          // 選択時のID
+                    int index = candidate.getIndex();    // リスト内の位置
+                    Log.d(TAG,"候補: " + value + " (ID: " + id + ")");
+                }
+            }
         });
 //
         context=getApplicationContext();
-        guesser=new ProbableKeyEventGuesser(context.getAssets());
-        primaryKeyCodeConverter=new PrimaryKeyCodeConverter(context, guesser);
-//android.os.Debug.waitForDebugger();
-        sessionExecutor=SessionExecutor.getInstanceInitializedIfNecessary(
-                new SessionHandlerFactory(com.google.common.base.Optional.<SharedPreferences>absent()), context);
-        sessionExecutor.setLogging(true);
+        ApplicationInfo info = Preconditions.checkNotNull(context).getApplicationInfo();
+        File userProfileDirectory = new File(info.dataDir, ".mozc");
+        MozcJNI.load(userProfileDirectory.getAbsolutePath(), null);
         sessionId=createSession();
-        renewUserDictionary();
-        syncDataThread=new HandlerThread("syncDataThread");// Create MOZC sync thraed
-        syncDataThread.start();
-        syncDataHandler=new Handler(syncDataThread.getLooper()){
-            static final int SYNC_DATA_COMMAND_PERIOD=15*6*1000;
-            @Override public void handleMessage(Message msg){
-                if(sessionExecutor!=null)sessionExecutor.syncData();
-                sendEmptyMessageDelayed(0,SYNC_DATA_COMMAND_PERIOD);
-            }
-        };
-        syncDataHandler.sendEmptyMessage(0);// First SYNC
     }
 }

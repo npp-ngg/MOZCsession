@@ -5,7 +5,7 @@ plugins {
 android {
     namespace 'com.myapp.mozc_session'
     compileSdk {
-        version = release(34)
+        version = release(36)
     }
 
     defaultConfig {
@@ -29,6 +29,7 @@ android {
 
 dependencies {
 
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'], exclude: [])
     implementation libs.appcompat
     implementation libs.material
     implementation libs.activity

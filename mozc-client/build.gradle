@@ -5,7 +5,7 @@ plugins {
 android {
     namespace 'org.mozc.android.inputmethod.japanese'
     compileSdk {
-        version = release(34)
+        version = release(36)
     }
 
     defaultConfig {
@@ -35,6 +35,6 @@ dependencies {
     implementation libs.material
     implementation libs.protobuf
     implementation libs.guava
-    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'], exclude: [])
+    api fileTree(dir: 'libs', include: ['*.aar', '*.jar'], exclude: [])
     implementation libs.javax.annotation.api
 }
