@@ -5,9 +5,13 @@ import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.UnderlineSpan;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 //
 import androidx.activity.EdgeToEdge;
@@ -17,15 +21,19 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 //
 import com.google.android.apps.inputmethod.libs.mozc.session.MozcJNI;
+import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
 //
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow.CandidateWindow;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow.CandidateList;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow.CandidateWord;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Command;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.KeyEvent;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Output;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Request;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.SessionCommand;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig.Config;
 //
 import java.io.File;
@@ -39,7 +47,8 @@ public class MainActivity extends AppCompatActivity {
 //
     final String TAG="MOZCsession";
     View mainView;
-    TextView key,word,addButton,selButton;
+    TextView key,word;
+    Button sendkeyButton,specialkey1Button,resetButton;
     Context context;
     HandlerThread syncDataThread;
     Handler syncDataHandler;
@@ -68,8 +77,19 @@ public class MainActivity extends AppCompatActivity {
                 Output output = response.getOutput();
                 if (output.getErrorCode() == Output.ErrorCode.SESSION_SUCCESS) {
                     sessionId = output.getId();
+                    SessionCommand switchMode = SessionCommand.newBuilder()
+                            .setType(SessionCommand.CommandType.SWITCH_COMPOSITION_MODE)
+                            .setCompositionMode(ProtoCommands.CompositionMode.HIRAGANA)
+                            .build();
+                    Input input = Input.newBuilder()
+                            .setType(Input.CommandType.SEND_COMMAND)
+                            .setId(sessionId)
+                            .setCommand(switchMode)
+                            .build();
+                    command = Command.newBuilder().setInput(input).build();
+                    response=execute(command);
                 } else {
-                    System.err.println("Session creation failed: " + output.getErrorCode());
+                    Log.d(TAG,"Session creation failed: " + output.getErrorCode());
                 }
             }
         }
@@ -81,36 +101,56 @@ public class MainActivity extends AppCompatActivity {
         ProtoCommands.KeyEvent keyEvent = KeyEvent.newBuilder()
                 .setKeyString(keyString)
                 .build();
+        Request request = Request.newBuilder()
+                .setCandidatesSizeLimit(50)
+                .setMixedConversion(true)
+                .build();
         Input input = Input.newBuilder()
                 .setType(Input.CommandType.SEND_KEY)
-                .setId(sessionId) // ★ Inputに対してIDをセットする
+                .setId(sessionId)
                 .setKey(keyEvent)
+                .setRequest(request)
                 .build();
         Command command = Command.newBuilder()
                 .setInput(input)
                 .build();
         Command response = execute(command);
-        if(response!=null)
+        if (response != null)
             if (response.hasOutput()) {
                 return response.getOutput();
             }
         return null;
     }
+    //
+    //
     Output sendSpace(){
+        Request request = Request.newBuilder()
+                .setCandidatesSizeLimit(50)
+                .setMixedConversion(true)
+                .build();
         Input input = Input.newBuilder()
                 .setType(Input.CommandType.SEND_KEY)
                 .setId(sessionId)
                 .setKey(KeyEvent.newBuilder().setSpecialKey(KeyEvent.SpecialKey.SPACE).build())
+                .setRequest(request)
                 .build();
         Command command = Command.newBuilder()
                 .setInput(input)
                 .build();
         Command response = execute(command);
-        if(response!=null)
-            if (response.hasOutput()) {
-                return response.getOutput();
-            }
+        if(response!=null) if (response.hasOutput()) return response.getOutput();
         return null;
+    }
+    //
+    void resetContext() {
+        ProtoCommands.Input input = Input.newBuilder()
+                .setType(Input.CommandType.SEND_COMMAND)
+                .setId(sessionId)
+                .setCommand(ProtoCommands.SessionCommand.newBuilder()
+                        .setType(ProtoCommands.SessionCommand.CommandType.RESET_CONTEXT))
+                .build();
+        Command command = Command.newBuilder().setInput(input).build();
+        execute(command);
     }
     // 候補リストを取得するヘルパーメソッド
     private List<String> getCandidateStrings(Output output) {
@@ -147,7 +187,29 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Failed to copy asset file: " + assetFileName, e);
         }
     }
-
+//
+    private void setComposingText(Output output){
+        if(output.hasPreedit()){
+            StringBuilder fullText=new StringBuilder();
+            ProtoCommands.Preedit preedit=output.getPreedit();
+            preedit.getSegmentList().forEach(segment->{fullText.append(segment.getValue());});
+            SpannableString compisingText=new SpannableString(fullText.toString());
+            int start=0;
+            for(ProtoCommands.Preedit.Segment segment:preedit.getSegmentList()){
+                int end=start+segment.getValue().length();
+                if(end==start)continue;
+                compisingText.setSpan(new UnderlineSpan(),start,end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                start=end;
+            }
+            word.setText(compisingText);
+        }else
+            word.setText("");
+        List<CandidateWord> candidates = output.getAllCandidateWords().getCandidatesList();
+        for (CandidateWord val : candidates) {
+            Log.d(TAG, "候補: " + val.getValue() + ", ID: " + val.getId());
+        }
+    }
+//
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
@@ -161,30 +223,43 @@ public class MainActivity extends AppCompatActivity {
         key=mainView.findViewById(R.id.key);
         key.setText("よみ");
         word=mainView.findViewById(R.id.word);
-        addButton=mainView.findViewById(R.id.addbtn);
-        selButton=mainView.findViewById(R.id.selbtn);
-        selButton.setOnClickListener(selBtn -> {
-            // 1. 入力した文字列を送信して未確定状態にする
-            Output output = sendKey(key.getText().toString());
-            // 2. スペースキーを送信して変換を開始する
-            output = sendSpace();
-            // 3. 候補リストを取得してログ出力
-            List<CandidateWord> candidates = output.getAllCandidateWords().getCandidatesList();
-            for (CandidateWord val : candidates) {
-                Log.d(TAG, "候補: " + val.getValue());
+        sendkeyButton=mainView.findViewById(R.id.sendbtn);
+        specialkey1Button=mainView.findViewById(R.id.specialkey1btn);
+        resetButton=mainView.findViewById(R.id.resetbtn);
+        sendkeyButton.setOnClickListener(btn -> {
+            Output output=null;
+            String input = key.getText().toString();
+            String[] chars = input.split("");
+            for(String s: chars) {
+                if(!s.isEmpty()){
+                    output = sendKey(s);}
+            }
+            if(output!=null){
+                setComposingText(output);
+                key.setText("");
             }
         });
 //
+        specialkey1Button.setOnClickListener(btn -> {
+            Output output = sendSpace();
+            setComposingText(output);
+            List<CandidateWord> candidates = output.getAllCandidateWords().getCandidatesList();
+            for (CandidateWord val : candidates) {
+                Log.d(TAG, "候補: " + val.getValue() + ", ID: " + val.getId());
+            }
+        });
+//
+        resetButton.setOnClickListener(btn -> {
+            resetContext();
+        });
+//
+//
         context=getApplicationContext();
-        ApInfo info = Preconditions.checkNotNull(context).getApplicationInfo();
+        ApplicationInfo info = Preconditions.checkNotNull(context).getApplicationInfo();
         File userProfileDirectory = new File(info.dataDir, mozcChildDir);
-        if (!userProfileDirectory.exists()) {
-            userProfileDirectory.mkdirs();
-        }
+        if (!userProfileDirectory.exists()) userProfileDirectory.mkdirs();
         File dataFile = new File(userProfileDirectory, mozcDataFile);
-        if (!dataFile.exists()) {
-            copyFileFromAssets(mozcDataFile, dataFile);
-        }
+        if (!dataFile.exists()) copyFileFromAssets(mozcDataFile, dataFile);
         MozcJNI.load(userProfileDirectory.getAbsolutePath(), dataFile.getAbsolutePath());
         sessionId=createSession();
     }
