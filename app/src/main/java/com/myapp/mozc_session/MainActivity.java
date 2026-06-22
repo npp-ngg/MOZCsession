@@ -34,6 +34,7 @@ import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Output;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Request;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.SessionCommand;
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Status;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoConfig.Config;
 //
 import java.io.File;
@@ -58,18 +59,11 @@ public class MainActivity extends AppCompatActivity {
     private final String mozcDataFile="mozc.data";
     private final String mozcChildDir=".mozc";
     //
-    class SaveTouchEvent implements View.OnTouchListener{
-        @Override
-        public boolean onTouch(View view, MotionEvent motionEvent){
-            return false;
-        }
-    }
     public long createSession() {
         long sessionId=0;
+//android.os.Debug.waitForDebugger();
         Command command=Command.newBuilder()
-                .setInput(Input.newBuilder()
-                        .setType(Input.CommandType.CREATE_SESSION)
-                        .build())
+                .setInput(Input.newBuilder().setType(Input.CommandType.CREATE_SESSION).build())
                 .build();
         Command response=execute(command);
         if(command!=null){
@@ -94,6 +88,33 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return sessionId;
+    }
+    //
+    private Output getStatus(){
+        SessionCommand getStatus=SessionCommand.newBuilder()
+                .setType(SessionCommand.CommandType.GET_STATUS)
+                .build();
+        Input input=Input.newBuilder()
+                .setType(Input.CommandType.SEND_COMMAND)
+                .setId(sessionId)
+                .setCommand(getStatus)
+                .build();
+        Command response=execute(Command.newBuilder().setInput(input).build());
+        Output output=response.getOutput();
+        if(output.hasMode())Log.d(TAG,"output.mode: "+output.getMode());
+        if(output.hasStatus()){
+            Status status=output.getStatus();
+            if(status.hasActivated())Log.d(TAG,"Activated: "+status.getActivated());
+            if(status.hasMode())Log.d(TAG,"Mode: "+status.getMode());
+            if(status.hasComebackMode())Log.d(TAG,"ComebackMode: "+status.getComebackMode());
+            if(status.hasUndoAvailable())Log.d(TAG,"UndoAvailable: "+status.getUndoAvailable());
+        }
+        if(output.hasServerVersion()){
+            Output.VersionInfo versionInfo=output.getServerVersion();
+            Log.d(TAG,"MozcVersion: "+versionInfo.getMozcVersion());
+            Log.d(TAG,"DataVersion: "+versionInfo.getDataVersion());
+        }
+        return output;
     }
     // 2. キー入力の送信（変換）
     Output sendKey(String keyString) {
@@ -162,7 +183,6 @@ public class MainActivity extends AppCompatActivity {
         }
         return candidates;
     }
-
     // JNI呼び出しのラッパー
     private Command execute(Command command) {
         try {
@@ -171,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG,"Response="+response.toString());
             return response;
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG,e.getMessage());
             return null;
         }
     }
@@ -184,7 +204,7 @@ public class MainActivity extends AppCompatActivity {
                 os.write(buffer, 0, length);
             }
         } catch (IOException e) {
-            Log.e(TAG, "Failed to copy asset file: " + assetFileName, e);
+            Log.e(TAG, "Failed to copy asset file: " + assetFileName + e.getMessage());
         }
     }
 //
@@ -210,29 +230,31 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 //
-    @Override protected void onCreate(Bundle savedInstanceState) {
+    @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         mainView=findViewById(R.id.main);
         ViewCompat.setOnApplyWindowInsetsListener(mainView, (v, insets)->{
             Insets systemBars=insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            v.setPadding(systemBars.left,systemBars.top,systemBars.right,systemBars.bottom);
             return insets;
         });
         key=mainView.findViewById(R.id.key);
-        key.setText("よみ");
+        key.setText("");
         word=mainView.findViewById(R.id.word);
         sendkeyButton=mainView.findViewById(R.id.sendbtn);
         specialkey1Button=mainView.findViewById(R.id.specialkey1btn);
         resetButton=mainView.findViewById(R.id.resetbtn);
-        sendkeyButton.setOnClickListener(btn -> {
+        sendkeyButton.setOnClickListener(btn->{
             Output output=null;
-            String input = key.getText().toString();
-            String[] chars = input.split("");
+            String input=key.getText().toString();
+            String[] chars=input.split("");
             for(String s: chars) {
                 if(!s.isEmpty()){
-                    output = sendKey(s);}
+                    output = sendKey(s);
+                    getStatus();
+                }
             }
             if(output!=null){
                 setComposingText(output);
@@ -240,16 +262,16 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 //
-        specialkey1Button.setOnClickListener(btn -> {
-            Output output = sendSpace();
-            setComposingText(output);
-            List<CandidateWord> candidates = output.getAllCandidateWords().getCandidatesList();
-            for (CandidateWord val : candidates) {
-                Log.d(TAG, "候補: " + val.getValue() + ", ID: " + val.getId());
+        specialkey1Button.setOnClickListener(btn->{
+            Output output=sendSpace();
+            if(output!=null){
+                setComposingText(output);
+                getStatus();
+                key.setText("");
             }
         });
 //
-        resetButton.setOnClickListener(btn -> {
+        resetButton.setOnClickListener(btn->{
             resetContext();
         });
 //
@@ -262,5 +284,6 @@ public class MainActivity extends AppCompatActivity {
         if (!dataFile.exists()) copyFileFromAssets(mozcDataFile, dataFile);
         MozcJNI.load(userProfileDirectory.getAbsolutePath(), dataFile.getAbsolutePath());
         sessionId=createSession();
+        getStatus();
     }
 }
