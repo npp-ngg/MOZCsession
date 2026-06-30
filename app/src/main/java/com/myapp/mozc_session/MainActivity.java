@@ -12,6 +12,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 //
 import androidx.activity.EdgeToEdge;
@@ -48,8 +49,8 @@ public class MainActivity extends AppCompatActivity {
 //
     final String TAG="MOZCsession";
     View mainView;
-    TextView key,word;
-    Button sendkeyButton,specialkey1Button,resetButton;
+    EditText key,word;
+    Button sendkeyButton,specialkeyButton,resetButton;
     Context context;
     HandlerThread syncDataThread;
     Handler syncDataHandler;
@@ -59,6 +60,32 @@ public class MainActivity extends AppCompatActivity {
     private final String mozcDataFile="mozc.data";
     private final String mozcChildDir=".mozc";
     //
+    private Config getConfig() {
+        Input input = Input.newBuilder().setType(Input.CommandType.GET_CONFIG).build();
+        Command command = Command.newBuilder().setInput(input).build();
+        Command response = execute(command);
+        if (response != null && response.hasOutput() && response.getOutput().hasConfig()) {
+            Config config = response.getOutput().getConfig();
+            Log.d(TAG, "Mozc Config: IncognitoMode=" + config.getIncognitoMode());
+            Log.d(TAG, "Mozc Config: PreeditMethod=" + config.getPreeditMethod());
+            return config;
+        }
+        return null;
+    }
+    private Config setConfig() {
+        Input input = Input.newBuilder().setType(Input.CommandType.SET_CONFIG)
+                .setConfig(Config.newBuilder().setSuggestionsSize(15).build())
+                .build();
+        Command command = Command.newBuilder().setInput(input).build();
+        Command response = execute(command);
+        if (response != null && response.hasOutput() && response.getOutput().hasConfig()) {
+            Config config = response.getOutput().getConfig();
+            Log.d(TAG, "Mozc Config: IncognitoMode=" + config.getIncognitoMode());
+            Log.d(TAG, "Mozc Config: PreeditMethod=" + config.getPreeditMethod());
+            return config;
+        }
+        return null;
+    }
     public long createSession() {
         long sessionId=0;
 //android.os.Debug.waitForDebugger();
@@ -123,8 +150,9 @@ public class MainActivity extends AppCompatActivity {
                 .setKeyString(keyString)
                 .build();
         Request request = Request.newBuilder()
-                .setCandidatesSizeLimit(50)
+                .setCandidatesSizeLimit(30)
                 .setMixedConversion(true)
+                .setAutoPartialSuggestion(true)
                 .build();
         Input input = Input.newBuilder()
                 .setType(Input.CommandType.SEND_KEY)
@@ -144,7 +172,7 @@ public class MainActivity extends AppCompatActivity {
     }
     //
     //
-    Output sendSpace(){
+    Output sendSpecialKey(int n){
         Request request = Request.newBuilder()
                 .setCandidatesSizeLimit(50)
                 .setMixedConversion(true)
@@ -152,7 +180,7 @@ public class MainActivity extends AppCompatActivity {
         Input input = Input.newBuilder()
                 .setType(Input.CommandType.SEND_KEY)
                 .setId(sessionId)
-                .setKey(KeyEvent.newBuilder().setSpecialKey(KeyEvent.SpecialKey.SPACE).build())
+                .setKey(KeyEvent.newBuilder().setSpecialKey(KeyEvent.SpecialKey.values()[n]).build())
                 .setRequest(request)
                 .build();
         Command command = Command.newBuilder()
@@ -163,15 +191,16 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
     //
-    void resetContext() {
+    void sendSessionCommand(int n){
         ProtoCommands.Input input = Input.newBuilder()
                 .setType(Input.CommandType.SEND_COMMAND)
                 .setId(sessionId)
                 .setCommand(ProtoCommands.SessionCommand.newBuilder()
-                        .setType(ProtoCommands.SessionCommand.CommandType.RESET_CONTEXT))
+                        .setType(ProtoCommands.SessionCommand.CommandType.values()[n]))
                 .build();
         Command command = Command.newBuilder().setInput(input).build();
         execute(command);
+        key.setText("");
     }
     // 候補リストを取得するヘルパーメソッド
     private List<String> getCandidateStrings(Output output) {
@@ -212,6 +241,8 @@ public class MainActivity extends AppCompatActivity {
         if(output.hasPreedit()){
             StringBuilder fullText=new StringBuilder();
             ProtoCommands.Preedit preedit=output.getPreedit();
+            int cursor=preedit.getCursor();
+            Log.d(TAG,"cursor="+cursor);
             preedit.getSegmentList().forEach(segment->{fullText.append(segment.getValue());});
             SpannableString compisingText=new SpannableString(fullText.toString());
             int start=0;
@@ -244,7 +275,7 @@ public class MainActivity extends AppCompatActivity {
         key.setText("");
         word=mainView.findViewById(R.id.word);
         sendkeyButton=mainView.findViewById(R.id.sendbtn);
-        specialkey1Button=mainView.findViewById(R.id.specialkey1btn);
+        specialkeyButton=mainView.findViewById(R.id.specialkey1btn);
         resetButton=mainView.findViewById(R.id.resetbtn);
         sendkeyButton.setOnClickListener(btn->{
             Output output=null;
@@ -253,7 +284,7 @@ public class MainActivity extends AppCompatActivity {
             for(String s: chars) {
                 if(!s.isEmpty()){
                     output = sendKey(s);
-                    getStatus();
+//                    getStatus();
                 }
             }
             if(output!=null){
@@ -262,17 +293,17 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 //
-        specialkey1Button.setOnClickListener(btn->{
-            Output output=sendSpace();
+        specialkeyButton.setOnClickListener(btn->{
+            String input=key.getText().toString();
+            Output output=sendSpecialKey(Integer.parseInt(input));
             if(output!=null){
                 setComposingText(output);
-                getStatus();
-                key.setText("");
+//                getStatus();
             }
         });
 //
         resetButton.setOnClickListener(btn->{
-            resetContext();
+            sendSessionCommand(Integer.parseInt(key.getText().toString()));
         });
 //
 //
@@ -283,7 +314,11 @@ public class MainActivity extends AppCompatActivity {
         File dataFile = new File(userProfileDirectory, mozcDataFile);
         if (!dataFile.exists()) copyFileFromAssets(mozcDataFile, dataFile);
         MozcJNI.load(userProfileDirectory.getAbsolutePath(), dataFile.getAbsolutePath());
+//        MozcJNI.load(userProfileDirectory.getAbsolutePath(), null);
         sessionId=createSession();
+        setConfig();
+        getConfig();
         getStatus();
+
     }
 }
