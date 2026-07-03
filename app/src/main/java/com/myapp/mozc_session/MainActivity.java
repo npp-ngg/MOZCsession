@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Message;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.UnderlineSpan;
@@ -43,22 +44,41 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 //
 public class MainActivity extends AppCompatActivity {
-//
-    final String TAG="MOZCsession";
+    //
+    final String TAG = "MOZCsession";
     View mainView;
-    EditText key,word;
-    Button sendkeyButton,specialkeyButton,resetButton;
+    EditText key, word;
+    Button sendkeyButton, specialkeyButton, resetButton;
     Context context;
-    HandlerThread syncDataThread;
-    Handler syncDataHandler;
+    HandlerThread sendCommandThread,setOutputThread;
+    Handler sendCommandHandler,setOutputHandler;
     long sessionId;
+    List<String> candidateList=new ArrayList<>();
     long selectedDictionaryId;
     Config config;
-    private final String mozcDataFile="mozc.data";
-    private final String mozcChildDir=".mozc";
+    private static final int MOZC_SEND_SPECIAL_KEY=0;
+    private static final int MOZC_SEND_KEY=1;
+    private static final int MOZC_SEND_SESSION_COMMAND=2;
+    private final String mozcDataFile = "mozc.data";
+    private final String mozcChildDir = ".mozc";
+//
+    private class SetOutput implements Runnable{
+        Output output;
+        public SetOutput(Output output){
+            this.output=output;
+        }
+        @Override public void run(){
+            List<String> candidateList=getAllCandidateList(output);
+            setComposingText(output);
+            Log.d(TAG,"候補数="+candidateList.size());
+            Log.d(TAG,"候補="+candidateList.toString());
+            key.setText("");
+        }
+    }
     //
     private Config getConfig() {
         Input input = Input.newBuilder().setType(Input.CommandType.GET_CONFIG).build();
@@ -72,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
         }
         return null;
     }
+
     private Config setConfig() {
         Input input = Input.newBuilder().setType(Input.CommandType.SET_CONFIG)
                 .setConfig(Config.newBuilder().setSuggestionsSize(15).build())
@@ -86,14 +107,15 @@ public class MainActivity extends AppCompatActivity {
         }
         return null;
     }
+//
     public long createSession() {
-        long sessionId=0;
+        long sessionId = 0;
 //android.os.Debug.waitForDebugger();
-        Command command=Command.newBuilder()
+        Command command = Command.newBuilder()
                 .setInput(Input.newBuilder().setType(Input.CommandType.CREATE_SESSION).build())
                 .build();
-        Command response=execute(command);
-        if(command!=null){
+        Command response = execute(command);
+        if (command != null) {
             if (response.hasOutput()) {
                 Output output = response.getOutput();
                 if (output.getErrorCode() == Output.ErrorCode.SESSION_SUCCESS) {
@@ -108,41 +130,43 @@ public class MainActivity extends AppCompatActivity {
                             .setCommand(switchMode)
                             .build();
                     command = Command.newBuilder().setInput(input).build();
-                    response=execute(command);
+                    response = execute(command);
                 } else {
-                    Log.d(TAG,"Session creation failed: " + output.getErrorCode());
+                    Log.d(TAG, "Session creation failed: " + output.getErrorCode());
                 }
             }
         }
         return sessionId;
     }
-    //
-    private Output getStatus(){
-        SessionCommand getStatus=SessionCommand.newBuilder()
+//
+    private Output getStatus() {
+        SessionCommand getStatus = SessionCommand.newBuilder()
                 .setType(SessionCommand.CommandType.GET_STATUS)
                 .build();
-        Input input=Input.newBuilder()
+        Input input = Input.newBuilder()
                 .setType(Input.CommandType.SEND_COMMAND)
                 .setId(sessionId)
                 .setCommand(getStatus)
                 .build();
-        Command response=execute(Command.newBuilder().setInput(input).build());
-        Output output=response.getOutput();
-        if(output.hasMode())Log.d(TAG,"output.mode: "+output.getMode());
-        if(output.hasStatus()){
-            Status status=output.getStatus();
-            if(status.hasActivated())Log.d(TAG,"Activated: "+status.getActivated());
-            if(status.hasMode())Log.d(TAG,"Mode: "+status.getMode());
-            if(status.hasComebackMode())Log.d(TAG,"ComebackMode: "+status.getComebackMode());
-            if(status.hasUndoAvailable())Log.d(TAG,"UndoAvailable: "+status.getUndoAvailable());
+        Command response = execute(Command.newBuilder().setInput(input).build());
+        Output output = response.getOutput();
+        if (output.hasMode()) Log.d(TAG, "output.mode: " + output.getMode());
+        if (output.hasStatus()) {
+            Status status = output.getStatus();
+            if (status.hasActivated()) Log.d(TAG, "Activated: " + status.getActivated());
+            if (status.hasMode()) Log.d(TAG, "Mode: " + status.getMode());
+            if (status.hasComebackMode()) Log.d(TAG, "ComebackMode: " + status.getComebackMode());
+            if (status.hasUndoAvailable())
+                Log.d(TAG, "UndoAvailable: " + status.getUndoAvailable());
         }
-        if(output.hasServerVersion()){
-            Output.VersionInfo versionInfo=output.getServerVersion();
-            Log.d(TAG,"MozcVersion: "+versionInfo.getMozcVersion());
-            Log.d(TAG,"DataVersion: "+versionInfo.getDataVersion());
+        if (output.hasServerVersion()) {
+            Output.VersionInfo versionInfo = output.getServerVersion();
+            Log.d(TAG, "MozcVersion: " + versionInfo.getMozcVersion());
+            Log.d(TAG, "DataVersion: " + versionInfo.getDataVersion());
         }
         return output;
     }
+
     // 2. キー入力の送信（変換）
     Output sendKey(String keyString) {
         // 1. キーイベントを定義
@@ -170,9 +194,9 @@ public class MainActivity extends AppCompatActivity {
             }
         return null;
     }
-    //
-    //
-    Output sendSpecialKey(int n){
+//
+//
+    Output sendSpecialKey(int n) {
         Request request = Request.newBuilder()
                 .setCandidatesSizeLimit(50)
                 .setMixedConversion(true)
@@ -187,43 +211,41 @@ public class MainActivity extends AppCompatActivity {
                 .setInput(input)
                 .build();
         Command response = execute(command);
-        if(response!=null) if (response.hasOutput()) return response.getOutput();
+        if (response != null) if (response.hasOutput()) return response.getOutput();
         return null;
     }
     //
-    void sendSessionCommand(int n){
-        ProtoCommands.Input input = Input.newBuilder()
+    Command sendSessionCommand(int n){
+        ProtoCommands.Input input=Input.newBuilder()
                 .setType(Input.CommandType.SEND_COMMAND)
                 .setId(sessionId)
                 .setCommand(ProtoCommands.SessionCommand.newBuilder()
                         .setType(ProtoCommands.SessionCommand.CommandType.values()[n]))
                 .build();
-        Command command = Command.newBuilder().setInput(input).build();
-        execute(command);
-        key.setText("");
+        Command command=Command.newBuilder().setInput(input).build();
+        return execute(command);
     }
     // 候補リストを取得するヘルパーメソッド
-    private List<String> getCandidateStrings(Output output) {
-        List<String> candidates = new ArrayList<>();
-        if (output != null && output.hasCandidateWindow()) {
-            for (CandidateWindow.Candidate candidate : output.getCandidateWindow().getCandidateList()) {
-                candidates.add(candidate.getValue());
-            }
-        }
-        return candidates;
+    private List<String> getAllCandidateList(Output output) {
+        List<String> candidateList = new ArrayList<>();
+        if (output == null || !output.hasAllCandidateWords()) return candidateList;
+        List<CandidateWord> candidates = output.getAllCandidateWords().getCandidatesList();
+        candidates.forEach(c -> candidateList.add(c.getValue()));
+        return candidateList;
     }
     // JNI呼び出しのラッパー
     private Command execute(Command command) {
         try {
             byte[] responseBytes = MozcJNI.evalCommand(command.toByteArray());
-            Command response=Command.parseFrom(responseBytes);
-            Log.d(TAG,"Response="+response.toString());
+            Command response = Command.parseFrom(responseBytes);
+//            Log.d(TAG,"Response="+response.toString());
             return response;
         } catch (Exception e) {
-            Log.e(TAG,e.getMessage());
+            Log.e(TAG, e.getMessage());
             return null;
         }
     }
+//
     private void copyFileFromAssets(String assetFileName, File destFile) {
         try (InputStream is = getAssets().open(assetFileName);
              FileOutputStream os = new FileOutputStream(destFile)) {
@@ -243,22 +265,20 @@ public class MainActivity extends AppCompatActivity {
             ProtoCommands.Preedit preedit=output.getPreedit();
             int cursor=preedit.getCursor();
             Log.d(TAG,"cursor="+cursor);
-            preedit.getSegmentList().forEach(segment->{fullText.append(segment.getValue());});
+            preedit.getSegmentList().forEach(segment->{
+                fullText.append(segment.getValue());
+            });
             SpannableString compisingText=new SpannableString(fullText.toString());
             int start=0;
             for(ProtoCommands.Preedit.Segment segment:preedit.getSegmentList()){
                 int end=start+segment.getValue().length();
                 if(end==start)continue;
-                compisingText.setSpan(new UnderlineSpan(),start,end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                compisingText.setSpan(new UnderlineSpan(),start,end,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 start=end;
             }
             word.setText(compisingText);
         }else
             word.setText("");
-        List<CandidateWord> candidates = output.getAllCandidateWords().getCandidatesList();
-        for (CandidateWord val : candidates) {
-            Log.d(TAG, "候補: " + val.getValue() + ", ID: " + val.getId());
-        }
     }
 //
     @Override protected void onCreate(Bundle savedInstanceState){
@@ -266,7 +286,7 @@ public class MainActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         mainView=findViewById(R.id.main);
-        ViewCompat.setOnApplyWindowInsetsListener(mainView, (v, insets)->{
+        ViewCompat.setOnApplyWindowInsetsListener(mainView,(v,insets)->{
             Insets systemBars=insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left,systemBars.top,systemBars.right,systemBars.bottom);
             return insets;
@@ -278,36 +298,29 @@ public class MainActivity extends AppCompatActivity {
         specialkeyButton=mainView.findViewById(R.id.specialkey1btn);
         resetButton=mainView.findViewById(R.id.resetbtn);
         sendkeyButton.setOnClickListener(btn->{
-            Output output=null;
-            String input=key.getText().toString();
-            String[] chars=input.split("");
-            for(String s: chars) {
-                if(!s.isEmpty()){
-                    output = sendKey(s);
-//                    getStatus();
-                }
-            }
-            if(output!=null){
-                setComposingText(output);
-                key.setText("");
-            }
+            String word=key.getText().toString();
+            for(int i=0;i<word.length();i++)
+                sendCommandHandler.sendMessage(sendCommandHandler.obtainMessage(MOZC_SEND_KEY,(int)(word.charAt(i)),0));
+            key.setText("");
         });
 //
         specialkeyButton.setOnClickListener(btn->{
-            String input=key.getText().toString();
-            Output output=sendSpecialKey(Integer.parseInt(input));
-            if(output!=null){
-                setComposingText(output);
-//                getStatus();
-            }
+            sendCommandHandler.sendMessage(
+                    sendCommandHandler.obtainMessage(
+                        MOZC_SEND_SPECIAL_KEY,Integer.parseInt(key.getText().toString()),0));
+            key.setText("");
         });
 //
         resetButton.setOnClickListener(btn->{
-            sendSessionCommand(Integer.parseInt(key.getText().toString()));
+            sendCommandHandler.removeCallbacksAndMessages(null);
+            sendCommandHandler.sendMessage(
+                    sendCommandHandler.obtainMessage(
+                        MOZC_SEND_SESSION_COMMAND,Integer.parseInt(key.getText().toString()),0));
+            key.setText("");
         });
 //
 //
-        context=getApplicationContext();
+        context = getApplicationContext();
         ApplicationInfo info = Preconditions.checkNotNull(context).getApplicationInfo();
         File userProfileDirectory = new File(info.dataDir, mozcChildDir);
         if (!userProfileDirectory.exists()) userProfileDirectory.mkdirs();
@@ -315,10 +328,39 @@ public class MainActivity extends AppCompatActivity {
         if (!dataFile.exists()) copyFileFromAssets(mozcDataFile, dataFile);
         MozcJNI.load(userProfileDirectory.getAbsolutePath(), dataFile.getAbsolutePath());
 //        MozcJNI.load(userProfileDirectory.getAbsolutePath(), null);
-        sessionId=createSession();
+        sessionId = createSession();
         setConfig();
         getConfig();
         getStatus();
-
+        sendCommandThread=new HandlerThread("sendCommandThread");
+        sendCommandThread.start();
+        sendCommandHandler=new Handler(sendCommandThread.getLooper()){
+            @Override public void handleMessage(Message msg){
+                switch(msg.what){
+                    case MOZC_SEND_KEY:{
+                        Output output=sendKey(String.valueOf((char)msg.arg1));
+                        if(output!=null)setOutputHandler.sendMessage(setOutputHandler.obtainMessage(0,output));
+                        break;
+                    }
+                    case MOZC_SEND_SPECIAL_KEY:{
+                        Output output=sendSpecialKey(msg.arg1);
+                        if(output!=null)setOutputHandler.sendMessage(setOutputHandler.obtainMessage(0,output));
+                        break;
+                    }
+                    case MOZC_SEND_SESSION_COMMAND:
+                        sendSessionCommand(msg.arg1);
+                        break;
+                    default:
+                }
+            }
+        };
+        setOutputThread=new HandlerThread("setOutputThread");
+        setOutputThread.start();
+        setOutputHandler=new Handler(setOutputThread.getLooper()){
+            @Override public void handleMessage(Message msg){
+                Output output=(Output)msg.obj;
+                if(output!=null)runOnUiThread(new SetOutput((Output)msg.obj));
+            }
+        };
     }
 }
